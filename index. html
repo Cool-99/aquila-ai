@@ -1,1 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aquila AI</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: white;
+    }
+    header {
+      padding: 20px;
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      font-size: 25px;
+      font-weight: bold;
+      color: #58a6ff;
+    }
+    main {
+      max-width: 700px;
+      margin: 25px auto;
+      padding: 15px;
+    }
+    #status {
+      color: #8b949e;
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    #chat {
+      height: 55vh;
+      overflow-y: auto;
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 15px;
+      background: #161b22;
+    }
+    .message {
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 10px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .user { background: #1f3a5a; }
+    .ai { background: #21262d; }
+    .controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    input {
+      flex: 1;
+      min-width: 0;
+      padding: 14px;
+      border-radius: 9px;
+      border: 1px solid #30363d;
+      background: #161b22;
+      color: white;
+      font-size: 16px;
+    }
+    button {
+      padding: 12px 16px;
+      background: #238636;
+      color: white;
+      border: 0;
+      border-radius: 9px;
+      font-size: 15px;
+    }
+    button:disabled { opacity: .5; }
+    #load {
+      width: 100%;
+      margin-top: 12px;
+      background: #1f6feb;
+    }
+    small { color: #8b949e; display: block; margin-top: 15px; }
+  </style>
+</head>
+<body>
+  <header>🦅 Aquila AI</header>
+  <main>
+    <div id="status">Welcome! Your AI workspace is ready.</div>
+    <div id="chat">
+      <div class="message ai">Assalam-o-alaikum! Main Aquila AI hoon. Abhi basic chat interface hai. Local AI model load karne ke liye neeche button use karo.</div>
+    </div>
+    <div class="controls">
+      <input id="prompt" placeholder="Apna sawal likho..." />
+      <button id="send">Send</button>
+    </div>
+    <button id="load">Check WebGPU & Load Local AI</button>
+    <small>Local AI requires a compatible browser, WebGPU and enough memory. The model may use significant mobile data.</small>
+  </main>
+  <script type="module">
+    const chat = document.getElementById("chat");
+    const promptBox = document.getElementById("prompt");
+    const send = document.getElementById("send");
+    const load = document.getElementById("load");
+    const status = document.getElementById("status");
+    let engine = null;
 
+    function message(text, who) {
+      const div = document.createElement("div");
+      div.className = "message " + who;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    send.onclick = async () => {
+      const text = promptBox.value.trim();
+      if (!text) return;
+      promptBox.value = "";
+      message(text, "user");
+
+      if (!engine) {
+        message("Local AI abhi load nahi hui. Pehle 'Check WebGPU & Load Local AI' dabao.", "ai");
+        return;
+      }
+
+      send.disabled = true;
+      const reply = message("Soch raha hoon...", "ai");
+      try {
+        const result = await engine.chat.completions.create({
+          messages: [{ role: "user", content: text }]
+        });
+        reply.textContent = result.choices[0].message.content;
+      } catch (e) {
+        reply.textContent = "Error: " + e.message;
+      }
+      send.disabled = false;
+    };
+
+    promptBox.addEventListener("keydown", e => {
+      if (e.key === "Enter") send.click();
+    });
+
+    load.onclick = async () => {
+      if (!("gpu" in navigator)) {
+        status.textContent = "WebGPU support nahi hai. Chrome update karo ya kisi compatible device par try karo.";
+        return;
+      }
+      load.disabled = true;
+      status.textContent = "WebGPU check ho raha hai...";
+      try {
+        const adapter = await navigator.gpu.requestAdapter();
+        if (!adapter) throw new Error("GPU adapter nahi mila.");
+        status.textContent = "WebGPU available hai. Local AI library load ho rahi hai...";
+        const { CreateMLCEngine } = await import(
+          "https://esm.run/@mlc-ai/web-llm"
+        );
+        const model = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+        engine = await CreateMLCEngine(model, {
+          initProgressCallback: p => {
+            status.textContent = "Model download ho raha hai: " +
+              Math.round((p.progress || 0) * 100) + "%";
+          }
+        });
+        status.textContent = "Aquila AI ready hai! Ab sawal poochho.";
+      } catch (e) {
+        status.textContent = "AI load nahi hui: " + e.message +
+          ". Compatible Chrome, internet aur available memory check karo.";
+      } finally {
+        load.disabled = false;
+      }
+    };
+  </script>
+</body>
+</html>
